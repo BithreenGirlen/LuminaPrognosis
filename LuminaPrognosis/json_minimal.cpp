@@ -5,6 +5,9 @@
 
 #include "json_minimal.h"
 
+namespace json_minimal
+{
+
 /*JSON特性体の抽出*/
 bool ExtractJsonObject(char** src, const char* name, char** dst)
 {
@@ -19,17 +22,17 @@ bool ExtractJsonObject(char** src, const char* name, char** dst)
 	{
 		p = strstr(pp, name);
 		if (p == nullptr)return false;
+
+		pp = strchr(p, ':');
+		if (pp == nullptr)return false;
 	}
 	else
 	{
 		p = strchr(pp, '{');
 		if (p == nullptr)return false;
 		++iCount;
+		pp = p + 1;
 	}
-
-	pp = strchr(p, ':');
-	if (pp == nullptr)return false;
-	++pp;
 
 	for (;;)
 	{
@@ -59,16 +62,16 @@ bool ExtractJsonObject(char** src, const char* name, char** dst)
 		{
 			--iCount;
 		}
-		if (iCount <= 0)break;
-		if (*q != ']' && *q != '}')break;
 	}
+	++q;
 
-	nLen = q - p + 1;
-	char* buffer = static_cast<char*>(malloc(nLen + 1));
-	if (buffer == nullptr)return false;
-	memcpy(buffer, p, nLen);
-	*(buffer + nLen) = '\0';
-	*dst = buffer;
+	nLen = q - p;
+	char* pBuffer = static_cast<char*>(malloc(nLen + 1));
+	if (pBuffer == nullptr)return false;
+
+	memcpy(pBuffer, p, nLen);
+	*(pBuffer + nLen) = '\0';
+	*dst = pBuffer;
 	*src = q;
 
 	return true;
@@ -87,16 +90,17 @@ bool ExtractJsonArray(char** src, const char* name, char** dst)
 	{
 		p = strstr(pp, name);
 		if (p == nullptr)return false;
+
+		pp = strchr(p, ':');
+		if (pp == nullptr)return false;
 	}
 	else
 	{
-		p = strchr(pp, '"');
+		p = strchr(pp, '[');
 		if (p == nullptr)return false;
+		++iCount;
+		pp = p + 1;
 	}
-
-	pp = strchr(p, ':');
-	if (pp == nullptr)return false;
-	++pp;
 
 	for (;;)
 	{
@@ -126,16 +130,16 @@ bool ExtractJsonArray(char** src, const char* name, char** dst)
 		{
 			--iCount;
 		}
-		if (iCount <= 0)break;
-		if (*q != ']' && *q != '}')break;
 	}
+	++q;
 
-	nLen = q - p + 1;
-	char* buffer = static_cast<char*>(malloc(nLen + 1));
-	if (buffer == nullptr)return false;
-	memcpy(buffer, p, nLen);
-	*(buffer + nLen) = '\0';
-	*dst = buffer;
+	nLen = q - p;
+	char* pBuffer = static_cast<char*>(malloc(nLen + 1));
+	if (pBuffer == nullptr)return false;
+
+	memcpy(pBuffer, p, nLen);
+	*(pBuffer + nLen) = '\0';
+	*dst = pBuffer;
 	*src = q;
 
 	return true;
@@ -170,7 +174,7 @@ bool GetJsonElementValue(char* src, const char* name, char* dst, size_t nDstSize
 	}
 
 	nLen = p - pp;
-	if (nLen > nDstSize)return false;
+	if (nLen > nDstSize - 1)return false;
 	memcpy(dst, pp, nLen);
 	*(dst + nLen) = '\0';
 
@@ -218,7 +222,7 @@ bool ReadNextKey(char** src, char* key, size_t nKeySize, char* value, size_t nVa
 	}
 
 	nLen = pp - p;
-	if (nLen > nKeySize)return false;
+	if (nLen > nKeySize - 1)return false;
 	memcpy(key, p, nLen);
 	*(key + nLen) = '\0';
 
@@ -233,7 +237,7 @@ bool ReadNextKey(char** src, char* key, size_t nKeySize, char* value, size_t nVa
 	}
 
 	nLen = p - pp;
-	if (nLen > nValueSize)return false;
+	if (nLen > nValueSize - 1)return false;
 	memcpy(value, pp, nLen);
 	*(value + nLen) = '\0';
 	*src = p + 1;
@@ -266,10 +270,46 @@ bool ReadNextArrayValue(char** src, char* dst, size_t nDstSize)
 	}
 
 	nLen = pp - p;
-	if (nLen > nDstSize)return false;
+	if (nLen > nDstSize - 1)return false;
 	memcpy(dst, p, nLen);
 	*(dst + nLen) = '\0';
 	*src = *pp == '"' ? pp + 1: pp;
 
 	return true;
 }
+/*名称終わり位置まで読み進め*/
+bool ReadUpToNameEnd(char** src, const char* name, char* value, size_t nValueSize)
+{
+	char* p = nullptr;
+	char* pp = *src;
+
+	if (name != nullptr)
+	{
+		p = strstr(pp, name);
+		if (p == nullptr)return false;
+	}
+	else
+	{
+		p = FindJsonNameStart(pp);
+		if (p == nullptr)return false;
+		++p;
+	}
+
+	pp = FindJsonValueEnd(p);
+	if (pp == nullptr)return false;
+
+	/*名称取得*/
+	if (name == nullptr && value != nullptr && nValueSize != 0)
+	{
+		size_t nLen = pp - p;
+		if (nLen > nValueSize - 1)return false;
+		memcpy(value, p, nLen);
+		*(value + nLen) = '\0';
+	}
+
+	*src = *pp == '"' ? pp + 1 : pp;
+
+	return true;
+}
+
+} // namespace json_minimal

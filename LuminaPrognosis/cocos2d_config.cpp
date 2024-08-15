@@ -7,38 +7,28 @@
 void ReadPath(char* src, std::unordered_map<size_t, PathData>& pathMap)
 {
 	std::unique_ptr<char*> pBuffer = std::make_unique<char*>();
-	char* q = nullptr;
-	char* qq = nullptr;
-
-	bool bRet = ExtractJsonObject(&src, "paths", &*pBuffer);
+	bool bRet = json_minimal::ExtractJsonObject(&src, "paths", &*pBuffer);
 	if (!bRet)return;
-	qq = *pBuffer + strlen("paths\":[");
 
-	std::vector<char> vBuffer;
-	vBuffer.resize(256);
-
+	char* p = *pBuffer;
+	json_minimal::ReadUpToNameEnd(&p, nullptr);
+	std::vector<char> vBuffer(1024, '\0');
 	for (;;)
 	{
-		std::unique_ptr<char*> pBuffer2 = std::make_unique<char*>();
 		PathData path;
-		q = strchr(qq, '"');
-		if (q == nullptr)break;
 
-		++q;
-		qq = strchr(q, '"');
-		if (qq == nullptr)break;
-		size_t nLen = qq - q;
-
-		std::string strIndex = std::string(q, nLen);
-		int iIndex = strtol(strIndex.c_str(), nullptr, 10);
-
-		bRet = ExtractJsonArray(&q, strIndex.c_str(), &*pBuffer2);
+		bRet = json_minimal::ReadUpToNameEnd(&p, nullptr, vBuffer.data(), vBuffer.size());
 		if (!bRet)break;
-		qq = *pBuffer2 + nLen + 2;
+		int iIndex = strtol(vBuffer.data(), nullptr, 10);
 
+		pBuffer = std::make_unique<char*>();
+		bRet = json_minimal::ExtractJsonArray(&p, nullptr, &*pBuffer);
+		if (!bRet)break;
+
+		char* pp = *pBuffer;
 		for (size_t i = 0;;++i)
 		{
-			bRet = ReadNextArrayValue(&qq, vBuffer.data(), vBuffer.size());
+			bRet = json_minimal::ReadNextArrayValue(&pp, vBuffer.data(), vBuffer.size());
 			if (!bRet)break;
 			if (i == 0)
 			{
@@ -50,101 +40,81 @@ void ReadPath(char* src, std::unordered_map<size_t, PathData>& pathMap)
 			}
 		}
 		pathMap.insert({ iIndex, path });
-		qq = q + 1;
 	}
 }
 
 void ReadPack(char* src, std::vector<PackData>& packs)
 {
 	std::unique_ptr<char*> pBuffer = std::make_unique<char*>();
-	char* q = nullptr;
-	char* qq = nullptr;
-
-	bool bRet = ExtractJsonObject(&src, "packs", &*pBuffer);
+	bool bRet = json_minimal::ExtractJsonObject(&src, "packs", &*pBuffer);
 	if (!bRet)return;
-	qq = *pBuffer + strlen("packs\":[");
 
+	char* p = *pBuffer;
+	json_minimal::ReadUpToNameEnd(&p, nullptr);
+	std::vector<char> vBuffer(1024, '\0');
 	for (;;)
 	{
-		std::unique_ptr<char*> pBuffer2 = std::make_unique<char*>();
 		PackData pack;
-		q = strchr(qq, '"');
-		if (q == nullptr)break;
 
-		++q;
-		qq = strchr(q, '"');
-		if (qq == nullptr)break;
-		size_t nLen = qq - q;
-		pack.strPackName = std::string(q, nLen);
+		bRet = json_minimal::ReadUpToNameEnd(&p, nullptr, vBuffer.data(), vBuffer.size());
+		if (!bRet)break;
+		pack.strPackName = vBuffer.data();
 
-		bRet = ExtractJsonArray(&q, pack.strPackName.c_str(), &*pBuffer2);
-		qq = *pBuffer2 + nLen + 2;
+		pBuffer = std::make_unique<char*>();
+		bRet = json_minimal::ExtractJsonArray(&p, nullptr, &*pBuffer);
 		if (!bRet)break;
 
+		char* pp = *pBuffer;
 		for (;;)
 		{
-			char sBuffer[32]{};
-			bRet = ReadNextArrayValue(&qq, sBuffer, sizeof(sBuffer));
+			bRet = json_minimal::ReadNextArrayValue(&pp, vBuffer.data(), vBuffer.size());
 			if (!bRet)break;
-			size_t nIndex = strtol(sBuffer, nullptr, 10);
+			size_t nIndex = strtol(vBuffer.data(), nullptr, 10);
 			pack.nIndices.push_back(nIndex);
 		}
 
 		packs.push_back(pack);
-		qq = q + 1;
 	}
 }
 
 void ReadVersion(char* src, std::unordered_map<std::string, std::string>& versionMap, bool bIsNative)
 {
 	std::unique_ptr<char*> pBuffer = std::make_unique<char*>();
-	std::unique_ptr<char*> pBuffer2 = std::make_unique<char*>();
-	char* q = nullptr;
-	char* qq = nullptr;
-
-	bool bRet = ExtractJsonObject(&src, "versions", &*pBuffer2);
+	bool bRet = json_minimal::ExtractJsonObject(&src, "versions", &*pBuffer);
 	if (!bRet)return;
 
-	bRet = bIsNative ? ExtractJsonArray(&*pBuffer2, "native", &*pBuffer) : ExtractJsonArray(&*pBuffer2, "import", &*pBuffer);
+	char* p = *pBuffer;
+	pBuffer = std::make_unique<char*>();
+
+	bRet = bIsNative ? json_minimal::ExtractJsonArray(&p, "native", &*pBuffer) : json_minimal::ExtractJsonArray(&p, "import", &*pBuffer);
 	if (!bRet)return;
 
-	qq = bIsNative ? *pBuffer + strlen("native:\"[") : *pBuffer + strlen("import:\"[");
+	p = *pBuffer;
+	json_minimal::ReadUpToNameEnd(&p, nullptr);
 
+	std::vector<std::string> tempArray;
+	std::vector<char> vBuffer(1024, '\0');
 	for (;;)
 	{
-		char sBuffer[256]{};
+		bRet = json_minimal::ReadNextArrayValue(&p, vBuffer.data(), vBuffer.size());
+		if (!bRet)break;
+		tempArray.push_back(vBuffer.data());
+	}
+
+	for (size_t i = 0; i < tempArray.size() - 1; i += 2)
+	{
 		std::string strName;
 		std::string strVersion;
-		q = strchr(qq, ',');
-		if (q == nullptr)break;
-		size_t nLen = q - qq;
-		if (nLen > sizeof(sBuffer))break;
-		memcpy(sBuffer, qq, nLen);
-		*(sBuffer + nLen) = '\0';
-		size_t nIndex = strtol(sBuffer, nullptr, 10);
-		if (sBuffer[0] == '"')
+
+		if (tempArray.at(i).at(0) == '"')
 		{
-			*(sBuffer + nLen - 1LL) = '\0';
-			strName = &sBuffer[1];
+			strName = &tempArray.at(i)[1];
 		}
 		else
 		{
-			strName = sBuffer;
+			strName = tempArray.at(i);
 		}
-
-		qq = strchr(q, '"');
-		if (qq == nullptr)break;
-		++qq;
-
-		q = strchr(qq, '"');
-		if (q == nullptr)break;
-		nLen = q - qq;
-		if (nLen > sizeof(sBuffer))break;
-		memcpy(sBuffer, qq, nLen);
-		*(sBuffer + nLen) = '\0';
-
-		strVersion = sBuffer;
-		qq = q + 2;
+		strVersion = tempArray.at(i + 1);
 		versionMap.insert({ strName, strVersion });
 	}
 }
@@ -152,19 +122,17 @@ void ReadVersion(char* src, std::unordered_map<std::string, std::string>& versio
 void ReadUuid(char* src, std::vector<std::string>& uuids)
 {
 	std::unique_ptr<char*> pBuffer = std::make_unique<char*>();
-	bool bRet = ExtractJsonArray(&src, "uuids", &*pBuffer);
+	bool bRet = json_minimal::ExtractJsonArray(&src, "uuids", &*pBuffer);
 	if (!bRet)return;
 
-	char *p = *pBuffer + strlen("uuids\":[");
-	std::vector<char> vBuffer;
-	vBuffer.resize(256);
-
+	char *p = *pBuffer;
+	json_minimal::ReadUpToNameEnd(&p, nullptr);
+	std::vector<char> vBuffer(1024, '\0');
 	for (;;)
 	{
-		bRet = ReadNextArrayValue(&p, vBuffer.data(), vBuffer.size());
+		bRet = json_minimal::ReadNextArrayValue(&p, vBuffer.data(), vBuffer.size());
 		if (!bRet)break;
 		uuids.emplace_back(vBuffer.data());
-		++p;
 	}
 }
 
@@ -174,15 +142,15 @@ void ReadTypes(char* src, std::unordered_map<int, std::string>& types)
 
 	constexpr char szKey[] = R"("types":)";
 	std::unique_ptr<char*> pBuffer = std::make_unique<char*>();
-	bool bRet = ExtractJsonObject(&src, szKey, &*pBuffer);
+	bool bRet = json_minimal::ExtractJsonObject(&src, szKey, &*pBuffer);
 	if (!bRet)return;
 
-	char* p = *pBuffer + sizeof(szKey)/sizeof(char) - 1;
-	std::vector<char> vBuffer;
-	vBuffer.resize(256);
+	char* p = *pBuffer;
+	json_minimal::ReadUpToNameEnd(&p, nullptr);
+	std::vector<char> vBuffer(1024, '\0');
 	for (int i = 0;;++i)
 	{
-		bRet = ReadNextArrayValue(&p, vBuffer.data(), vBuffer.size());
+		bRet = json_minimal::ReadNextArrayValue(&p, vBuffer.data(), vBuffer.size());
 		if (!bRet)break;
 		types.insert({ i, vBuffer.data()});
 	}
@@ -202,22 +170,18 @@ void ReadConfig(char* src, ResourceInfo& r)
 void ReadSetting(char* src, std::vector<BundleVer>& bundles)
 {
 	std::unique_ptr<char*> pBuffer = std::make_unique<char*>();
-	char* p = nullptr;
-	bool bRet = false;
+	std::vector<char> nameBuffer(1024, '\0');
+	std::vector<char> valueBuffer(1024, '\0');
 
-	std::vector<char> nameBuffer;
-	nameBuffer.resize(256);
-	std::vector<char> valueBuffer;
-	valueBuffer.resize(256);
-
-	bRet = ExtractJsonObject(&src, "bundleVers", &*pBuffer);
+	bool bRet = json_minimal::ExtractJsonObject(&src, "bundleVers", &*pBuffer);
 	if (!bRet)return;
-	p = strchr(*pBuffer, ':');
+	char* p = *pBuffer;
+	json_minimal::ReadUpToNameEnd(&p, nullptr);
 
 	for (;;)
 	{
 		BundleVer a;
-		bRet = ReadNextKey(&p, nameBuffer.data(), nameBuffer.size(), valueBuffer.data(), valueBuffer.size());
+		bRet = json_minimal::ReadNextKey(&p, nameBuffer.data(), nameBuffer.size(), valueBuffer.data(), valueBuffer.size());
 		if (!bRet)break;
 
 		a.strRawName = nameBuffer.data();

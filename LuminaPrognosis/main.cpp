@@ -277,8 +277,8 @@ void DownloadBundleResources(const BundleVer& bundle)
 		std::string strRawName = TruncateFileName(path->second.strPath);
 		std::string strExtension = GetExtension(path->second.iFileTypes.at(0), r.types);
 
-		/*一般資源は暗号化されていない*/
-		bool bToBeDecrypted = strstr(path->second.strPath.c_str(), "HCG") != nullptr;
+		/*一般資源、並びSpine/HCGは暗号化されていない*/
+		bool bToBeDecrypted = strstr(path->second.strPath.c_str(), "Texture/HCG") != nullptr;
 
 		/*import側は脚本ファイル・skeletonファイルのみ保存*/
 		if (strstr(path->second.strPath.c_str(), "Scenario_csv/") != nullptr ||

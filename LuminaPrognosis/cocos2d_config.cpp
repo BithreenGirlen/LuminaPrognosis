@@ -1,4 +1,4 @@
-
+ï»¿
 #include <memory>
 
 #include "json_minimal.h"
@@ -26,7 +26,7 @@ void ReadPath(char* src, std::unordered_map<size_t, PathData>& pathMap)
 		if (!bRet)break;
 
 		char* pp = *pBuffer;
-		for (size_t i = 0;;++i)
+		for (size_t i = 0;; ++i)
 		{
 			bRet = json_minimal::ReadNextArrayValue(&pp, vBuffer.data(), vBuffer.size());
 			if (!bRet)break;
@@ -125,7 +125,7 @@ void ReadUuid(char* src, std::vector<std::string>& uuids)
 	bool bRet = json_minimal::ExtractJsonArray(&src, "uuids", &*pBuffer);
 	if (!bRet)return;
 
-	char *p = *pBuffer;
+	char* p = *pBuffer;
 	json_minimal::ReadUpToNameEnd(&p, nullptr);
 	std::vector<char> vBuffer(1024, '\0');
 	for (;;)
@@ -148,15 +148,15 @@ void ReadTypes(char* src, std::unordered_map<int, std::string>& types)
 	char* p = *pBuffer;
 	json_minimal::ReadUpToNameEnd(&p, nullptr);
 	std::vector<char> vBuffer(1024, '\0');
-	for (int i = 0;;++i)
+	for (int i = 0;; ++i)
 	{
 		bRet = json_minimal::ReadNextArrayValue(&p, vBuffer.data(), vBuffer.size());
 		if (!bRet)break;
-		types.insert({ i, vBuffer.data()});
+		types.insert({ i, vBuffer.data() });
 	}
 
 }
-/*‘Œ¹Œo˜Hî•ñ“Ç‚İæ‚è*/
+/*è³‡æºçµŒè·¯æƒ…å ±èª­ã¿å–ã‚Š*/
 void ReadConfig(char* src, ResourceInfo& r)
 {
 	ReadUuid(src, r.uuids);
@@ -166,7 +166,7 @@ void ReadConfig(char* src, ResourceInfo& r)
 	ReadPack(src, r.packs);
 	ReadTypes(src, r.types);
 }
-/*İ’èƒtƒ@ƒCƒ‹“Ç‚İæ‚è*/
+/*è¨­å®šãƒ•ã‚¡ã‚¤ãƒ«èª­ã¿å–ã‚Š*/
 void ReadSetting(char* src, std::vector<BundleVer>& bundles)
 {
 	std::unique_ptr<char*> pBuffer = std::make_unique<char*>();
@@ -189,30 +189,22 @@ void ReadSetting(char* src, std::vector<BundleVer>& bundles)
 		bundles.push_back(a);
 	}
 }
-/*«•ïƒtƒ@ƒCƒ‹õˆø”Ô†’Tõ*/
+/*æ¢±åŒ…ãƒ•ã‚¡ã‚¤ãƒ«ç´¢å¼•ç•ªå·æ¢ç´¢*/
 long long SearchPackIndices(size_t nIndex, const std::vector<PackData>& packs)
 {
 	for (size_t i = 0; i < packs.size(); ++i)
 	{
-		auto& pack = packs.at(i);
-		bool bFound = false;
-		for (size_t ii = 0; ii < pack.nIndices.size(); ++ii)
-		{
-			if (nIndex == pack.nIndices.at(ii))
-			{
-				bFound = true;
-				break;
-			}
-		}
-		if (!bFound)continue;
-		return i;
+		auto& pack = packs[i];
+		const auto& iter = std::find(pack.nIndices.begin(), pack.nIndices.end(), nIndex);
+		if (iter != pack.nIndices.cend())return i;
 	}
 	return -1;
 }
 
 std::string GetExtension(int iType, const std::unordered_map<int, std::string>& types)
 {
-	const std::unordered_map<std::string, std::string> extensionMap =
+	/* Some types, like cc.textAsset or cc.Prefab, exist only as import file. */
+	static const std::unordered_map<std::string, std::string> extensionMap =
 	{
 		{"cc.AudioClip", ".mp3"},
 		{"cc.Asset", ".atlas"},
@@ -222,11 +214,11 @@ std::string GetExtension(int iType, const std::unordered_map<int, std::string>& 
 		{"cc.JsonAsset", ""},
 		{"cc.Material", ""},
 		{"cc.ParticleAsset", ".plist"},
-		{"cc.Prefab, ", ".prefab"},
+		//{"cc.Prefab, ", ""},
 		{"cc.RenderTexture", ""},
 		{"cc.SpriteFrame", ""},
 		{"cc.SpriteAtlas", ".atlas"},
-		{"cc.TextAsset", ""},
+		//{"cc.TextAsset", ""},
 		{"cc.Texture2D", ""},
 		{"cc.TiledMapAsset", ""},
 		{"cc.TTFFont", ""},
@@ -234,7 +226,7 @@ std::string GetExtension(int iType, const std::unordered_map<int, std::string>& 
 		{"sp.SkeletonData", ".skel"}
 	};
 
-	const auto &iter = types.find(iType);
+	const auto& iter = types.find(iType);
 	if (iter != types.cend())
 	{
 		const auto& iter2 = extensionMap.find(iter->second);

@@ -10,14 +10,14 @@
 
 namespace mirai_girl
 {
-	const char szHostUrl[] = "https://cdn-app.miraigirl.net/";
+	constexpr const char szHostUrl[] = "https://cdn-app.miraigirl.net/";
 
 	/*csvファイル群*/
 	//const char szMasterCsv[] = "https://cdn-app.miraigirl.net/master/master.binary";
 	//const char szPassword[] = "DgT2WT0lHEKbaCmF";
 
 	/*URL連結*/
-	std::string ChainHostUrl(const std::string& strRelativeUrl)
+	static std::string ChainHostUrl(const std::string& strRelativeUrl)
 	{
 		std::string strUrl = szHostUrl;
 
@@ -43,7 +43,7 @@ namespace mirai_girl
 		return strUrl;
 	}
 	/*設定ファイルURL生成*/
-	std::string CreateConfigFileUrl(const BundleVer& bundle)
+	static std::string CreateConfigFileUrl(const BundleVer& bundle)
 	{
 		std::string strUrl = szHostUrl;
 		strUrl += "assets/";
@@ -51,7 +51,7 @@ namespace mirai_girl
 		return strUrl;
 	}
 	/*素材ファイルURL生成*/
-	std::string CreateAssetsFileUrl(const std::string& configName, const std::string& uuid, const std::string strVer, bool bIsNative)
+	static std::string CreateAssetsFileUrl(const std::string& configName, const std::string& uuid, const std::string& strVer, bool bIsNative)
 	{
 		std::string strUrl = szHostUrl;
 		strUrl += "assets/";
@@ -65,7 +65,7 @@ namespace mirai_girl
 		return strUrl;
 	}
 	/*梱包ファイルURL生成*/
-	std::string CreatePackJsonUrl(const std::string& configName, const std::string& packName, const std::string strVer)
+	static std::string CreatePackJsonUrl(const std::string& configName, const std::string& packName, const std::string& strVer)
 	{
 		std::string strUrl = szHostUrl;
 		strUrl += "assets/";
@@ -78,23 +78,37 @@ namespace mirai_girl
 		return strUrl;
 	}
 
-	/*画像復号*/
-	void DecryptImage(std::string& encrypted)
+	static std::string CreateUniqueUrl(const std::string& configName, std::string& packName, const std::string& strVer)
 	{
-		const std::string strSalt = "2fjaykPFd6bAJn59beX5TWDQzsEW";
-		std::string strTable = std::to_string(encrypted.size()) + strSalt;
-		std::string strKey;
+		std::string strUrl = szHostUrl;
+		strUrl += "assets/";
+		strUrl += configName;
+		strUrl += "/native/";
 
+		strUrl += packName.substr(0, 2) + '/' + packName + '.';
+		strUrl += strVer;
+		strUrl += ".png";
+		return strUrl;
+	}
+
+	/*画像復号*/
+	static void DecryptImage(std::string& encrypted)
+	{
+		static constexpr char szSalt[] = "2fjaykPFd6bAJn59beX5TWDQzsEW";
+		std::string strTable = std::to_string(encrypted.size()) + szSalt;
+
+		char szKey[32]{};
+		constexpr size_t nKeySize = sizeof(szKey);
 		char c = 0x00;
-		for (size_t i = 0; i < 32; ++i)
+		for (size_t i = 0; i < nKeySize; ++i)
 		{
-			strKey.push_back(c ^ strTable[i % strTable.size()]);
-			c = strKey.back();
+			szKey[i] = c ^ strTable[i % strTable.size()];
+			c = szKey[i];
 		}
 
 		for (size_t i = 0; i < encrypted.size(); ++i)
 		{
-			encrypted[i] ^= strKey[i % strKey.size()];
+			encrypted[i] ^= szKey[i % nKeySize];
 		}
 	}
 }
@@ -158,10 +172,10 @@ std::string GetSettingJsonFileName()
 	*
 	* 1. (HostUrl)/
 	* => System.import('./index.XXXXX.js')
-	* 
+	*
 	* 2. (HostUrl)/index.XXXXX.js
 	* => System.register(["./application.XXXXX.js"]
-	* 
+	*
 	* 3. (HostUrl)/application.XXXXX.js
 	* => this.settingsPath = 'src/settings.XXXXX.json';
 	*/
@@ -209,7 +223,7 @@ std::string GetSettingJson()
 	return strResult;
 }
 /*設定ファイルから必要情報抜粋*/
-void PickupDataFromBundleConfigFile(const BundleVer& bundle, ResourceInfo &r)
+void PickupDataFromBundleConfigFile(const BundleVer& bundle, ResourceInfo& r)
 {
 	std::string strUrl = mirai_girl::CreateConfigFileUrl(bundle);
 	unsigned long ulSize = 0;
@@ -235,7 +249,10 @@ bool DecryptAndSaveImage(const char* pzUrl, const char* pzFileName, const char* 
 	{
 		strFileData.resize(ulSize);
 		memcpy(&strFileData[0], pBuffer, ulSize);
-		mirai_girl::DecryptImage(strFileData);
+		if (!(static_cast<unsigned char>(strFileData[0]) == 0x89 && strFileData[1] == 'P' && strFileData[2] == 'N' && strFileData[3] == 'G'))
+		{
+			mirai_girl::DecryptImage(strFileData);
+		}
 		free(pBuffer);
 	}
 	else
@@ -271,8 +288,27 @@ void DownloadBundleResources(const BundleVer& bundle)
 
 	for (size_t i = 0; i < r.uuids.size(); ++i)
 	{
-		auto path = r.paths.find(i);
-		if (path == r.paths.end())continue;
+		const auto& path = r.paths.find(i);
+		if (path == r.paths.end())
+		{
+			/* Stand files which cannot be renamed. */
+			if (r.uuids[i].size() == 9)
+			{
+				auto iter = r.nativeVersion.find(std::to_string(i));
+				if (iter != r.nativeVersion.end())
+				{
+					std::string strUrl = mirai_girl::CreateUniqueUrl(bundle.strRawName, r.uuids.at(i), iter->second);
+					std::string strFileName = r.uuids[i] + ".png";
+					std::string strStandFolder = CreateWorkFolder("stands");
+					/* Files of which width is less than 32 is not encrypted. */
+					bool bRet = DecryptAndSaveImage(strUrl.c_str(), strFileName.c_str(), strStandFolder.c_str());
+				}
+			}
+			continue;
+		}
+#if 0
+		continue;
+#endif
 
 		std::string strRawName = TruncateFileName(path->second.strPath);
 		std::string strExtension = GetExtension(path->second.iFileTypes.at(0), r.types);
@@ -281,11 +317,11 @@ void DownloadBundleResources(const BundleVer& bundle)
 		bool bToBeDecrypted = strstr(path->second.strPath.c_str(), "Texture/HCG") != nullptr;
 
 		/*import側は脚本ファイル・skeletonファイルのみ保存*/
-		if (strstr(path->second.strPath.c_str(), "Scenario_csv/") != nullptr ||
-			(strstr(path->second.strPath.c_str(), "Spine/") != nullptr && path->second.iFileTypes.at(0) == 9)
+		if (strstr(path->second.strPath.c_str(), "Scenario_csv/") != nullptr
+			|| (strstr(path->second.strPath.c_str(), "Spine/") != nullptr && path->second.iFileTypes.at(0) == 9)
 			)
 		{
-			auto iter = r.importVersion.find(std::to_string(i));
+			const auto& iter = r.importVersion.find(std::to_string(i));
 			if (iter != r.importVersion.end())
 			{
 				std::string strUrl = mirai_girl::CreateAssetsFileUrl(bundle.strRawName, r.uuids.at(i), iter->second, false);
@@ -298,7 +334,7 @@ void DownloadBundleResources(const BundleVer& bundle)
 			}
 		}
 
-		auto iter2 = r.nativeVersion.find(std::to_string(i));
+		const auto& iter2 = r.nativeVersion.find(std::to_string(i));
 		if (iter2 != r.nativeVersion.end())
 		{
 			std::string strUrlName = mirai_girl::CreateAssetsFileUrl(bundle.strRawName, r.uuids.at(i), iter2->second, true);
